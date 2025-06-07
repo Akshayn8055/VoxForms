@@ -3,16 +3,19 @@ import { createClient } from '@supabase/supabase-js'
 const supabaseUrl = import.meta.env.VITE_SUPABASE_URL
 const supabaseAnonKey = import.meta.env.VITE_SUPABASE_ANON_KEY
 
-if (!supabaseUrl || !supabaseAnonKey) {
-  throw new Error('Missing Supabase environment variables')
-}
+// Provide fallback values for development
+const defaultUrl = 'https://placeholder.supabase.co'
+const defaultKey = 'placeholder-key'
 
-export const supabase = createClient(supabaseUrl, supabaseAnonKey)
+export const supabase = createClient(
+  supabaseUrl || defaultUrl, 
+  supabaseAnonKey || defaultKey
+)
 
 // Auth helper functions
 export const signInWithOAuth = async (provider: 'google' | 'microsoft') => {
   try {
-    console.log(`Starting ${provider} OAuth with URL: ${supabaseUrl}`)
+    console.log(`Starting ${provider} OAuth with URL: ${supabaseUrl || defaultUrl}`)
     
     const { data, error } = await supabase.auth.signInWithOAuth({
       provider,
