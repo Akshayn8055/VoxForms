@@ -63,15 +63,18 @@ const VoiceFormBuilder: React.FC<VoiceFormBuilderProps> = ({ onClose }) => {
   const ELEVENLABS_API_KEY = import.meta.env.VITE_ELEVENLABS_API_KEY;
   const ELEVENLABS_VOICE_ID = 'pNInz6obpgDQGcFmaJgB'; // Default voice ID (Adam)
 
-  // Check if API key is configured
-  const isApiKeyConfigured = ELEVENLABS_API_KEY && ELEVENLABS_API_KEY !== 'your-elevenlabs-api-key';
+  // Check if API key is configured and valid
+  const isApiKeyConfigured = ELEVENLABS_API_KEY && 
+    ELEVENLABS_API_KEY !== 'your-elevenlabs-api-key' && 
+    ELEVENLABS_API_KEY.startsWith('sk_') && 
+    ELEVENLABS_API_KEY.length > 20;
 
   const startListening = async () => {
     try {
       setError(null);
       
       if (!isApiKeyConfigured) {
-        setError('ElevenLabs API key not configured. Please add VITE_ELEVENLABS_API_KEY to your .env file.');
+        setError('ElevenLabs API key not configured properly. Please check your .env file and restart the development server.');
         return;
       }
 
@@ -79,8 +82,23 @@ const VoiceFormBuilder: React.FC<VoiceFormBuilderProps> = ({ onClose }) => {
       setTranscript('');
       audioChunksRef.current = [];
 
-      const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
-      mediaRecorderRef.current = new MediaRecorder(stream);
+      const stream = await navigator.mediaDevices.getUserMedia({ 
+        audio: {
+          sampleRate: 16000,
+          channelCount: 1,
+          echoCancellation: true,
+          noiseSuppression: true
+        }
+      });
+      
+      // Use webm format for better compatibility
+      const options = { mimeType: 'audio/webm;codecs=opus' };
+      if (!MediaRecorder.isTypeSupported(options.mimeType)) {
+        // Fallback to default format
+        mediaRecorderRef.current = new MediaRecorder(stream);
+      } else {
+        mediaRecorderRef.current = new MediaRecorder(stream, options);
+      }
 
       mediaRecorderRef.current.ondataavailable = (event) => {
         if (event.data.size > 0) {
@@ -89,11 +107,24 @@ const VoiceFormBuilder: React.FC<VoiceFormBuilderProps> = ({ onClose }) => {
       };
 
       mediaRecorderRef.current.onstop = async () => {
-        const audioBlob = new Blob(audioChunksRef.current, { type: 'audio/wav' });
-        await processAudioWithElevenLabs(audioBlob);
-        
-        // Stop all tracks to release microphone
-        stream.getTracks().forEach(track => track.stop());
+        try {
+          const audioBlob = new Blob(audioChunksRef.current, { 
+            type: mediaRecorderRef.current?.mimeType || 'audio/webm' 
+          });
+          
+          // Check if audio blob has content
+          if (audioBlob.size === 0) {
+            throw new Error('No audio data recorded');
+          }
+          
+          await processAudioWithElevenLabs(audioBlob);
+        } catch (error) {
+          console.error('Error in onstop handler:', error);
+          setError('Failed to process recorded audio. Please try again.');
+        } finally {
+          // Stop all tracks to release microphone
+          stream.getTracks().forEach(track => track.stop());
+        }
       };
 
       mediaRecorderRef.current.start();
@@ -139,7 +170,12 @@ const VoiceFormBuilder: React.FC<VoiceFormBuilderProps> = ({ onClose }) => {
         return;
       }
 
-      // Use ElevenLabs Speech-to-Text
+      // Validate audio blob
+      if (audioBlob.size === 0) {
+        throw new Error('No audio data to process');
+      }
+
+      // Use ElevenLabs Speech-to-Text with improved error handling
       const transcriptText = await speechToText(audioBlob);
       setTranscript(transcriptText);
       
@@ -154,10 +190,27 @@ const VoiceFormBuilder: React.FC<VoiceFormBuilderProps> = ({ onClose }) => {
         // Provide audio confirmation
         await playAudioFeedback(`Form updated successfully. Added ${processedForm.fields?.length || 0} new fields.`);
         setSuccess('Form updated successfully!');
+      } else {
+        setError('No speech detected. Please try speaking more clearly.');
       }
     } catch (error) {
       console.error('Error processing audio:', error);
-      setError('Failed to process voice command. Please try again.');
+      
+      // Provide more specific error messages
+      if (error instanceof Error) {
+        if (error.message.includes('422')) {
+          setError('Invalid audio format or API key issue. Please check your ElevenLabs API key and try again.');
+        } else if (error.message.includes('401')) {
+          setError('Invalid ElevenLabs API key. Please check your .env file.');
+        } else if (error.message.includes('429')) {
+          setError('API rate limit exceeded. Please wait a moment and try again.');
+        } else {
+          setError(`Failed to process voice command: ${error.message}`);
+        }
+      } else {
+        setError('Failed to process voice command. Please try again.');
+      }
+      
       if (isApiKeyConfigured) {
         await playAudioFeedback('Sorry, I could not process your voice command. Please try again.');
       }
@@ -195,11 +248,26 @@ const VoiceFormBuilder: React.FC<VoiceFormBuilderProps> = ({ onClose }) => {
 
   const speechToText = async (audioBlob: Blob): Promise<string> => {
     try {
+      // Validate API key format
+      if (!ELEVENLABS_API_KEY || !ELEVENLABS_API_KEY.startsWith('sk_')) {
+        throw new Error('Invalid ElevenLabs API key format');
+      }
+
+      // Convert audio blob to proper format if needed
+      let processedBlob = audioBlob;
+      
+      // If the blob is webm, convert to a more compatible format
+      if (audioBlob.type.includes('webm')) {
+        // For now, we'll try to send it as is, but with proper filename
+        processedBlob = new Blob([audioBlob], { type: 'audio/webm' });
+      }
+
       // Create FormData object for multipart/form-data request
       const formData = new FormData();
-      formData.append('file', audioBlob, 'audio.wav');
+      formData.append('file', processedBlob, 'audio.webm');
+      formData.append('model', 'whisper-1');
 
-      const response = await fetch('https://api.elevenlabs.io/v1/speech-to-text?model_id=whisper-1', {
+      const response = await fetch('https://api.elevenlabs.io/v1/speech-to-text', {
         method: 'POST',
         headers: {
           'Accept': 'application/json',
@@ -210,14 +278,33 @@ const VoiceFormBuilder: React.FC<VoiceFormBuilderProps> = ({ onClose }) => {
       });
 
       if (!response.ok) {
-        throw new Error(`ElevenLabs API error: ${response.status} - ${response.statusText}`);
+        const errorText = await response.text();
+        let errorMessage = `ElevenLabs API error: ${response.status}`;
+        
+        try {
+          const errorData = JSON.parse(errorText);
+          if (errorData.detail) {
+            errorMessage += ` - ${errorData.detail}`;
+          }
+        } catch {
+          // If error response is not JSON, use the text
+          if (errorText) {
+            errorMessage += ` - ${errorText}`;
+          }
+        }
+        
+        throw new Error(errorMessage);
       }
 
       const result = await response.json();
-      return result.text || '';
+      
+      if (!result.text) {
+        throw new Error('No transcription returned from API');
+      }
+      
+      return result.text;
     } catch (error) {
       console.error('ElevenLabs Speech-to-Text error:', error);
-      // Fallback to browser speech recognition
       throw error;
     }
   };
@@ -245,7 +332,8 @@ const VoiceFormBuilder: React.FC<VoiceFormBuilderProps> = ({ onClose }) => {
     });
 
     if (!response.ok) {
-      throw new Error(`ElevenLabs TTS API error: ${response.status} - ${response.statusText}`);
+      const errorText = await response.text();
+      throw new Error(`ElevenLabs TTS API error: ${response.status} - ${errorText}`);
     }
 
     return await response.blob();
@@ -609,11 +697,11 @@ const VoiceFormBuilder: React.FC<VoiceFormBuilderProps> = ({ onClose }) => {
                 <div className="flex items-center">
                   <AlertCircle className="w-4 h-4 text-yellow-600 mr-2" />
                   <p className="text-sm text-yellow-800">
-                    ElevenLabs API key not configured. Using browser speech recognition instead.
+                    ElevenLabs API key not configured properly.
                   </p>
                 </div>
                 <p className="text-xs text-yellow-700 mt-1">
-                  Add VITE_ELEVENLABS_API_KEY to your .env file for enhanced AI features.
+                  Add a valid VITE_ELEVENLABS_API_KEY to your .env file and restart the server.
                 </p>
               </div>
             )}
