@@ -11,7 +11,8 @@ import {
   AlertCircle,
   ArrowRight,
   Chrome,
-  Loader2
+  Loader2,
+  Info
 } from 'lucide-react';
 import { signInWithEmail, signInWithOAuth } from '../lib/supabase';
 import { useAuth } from '../contexts/AuthContext';
@@ -48,6 +49,40 @@ function Login() {
     }
   }, [searchParams]);
 
+  const getErrorMessage = (error: any) => {
+    const message = error?.message || '';
+    
+    if (message.includes('Invalid login credentials')) {
+      return {
+        title: 'Login Failed',
+        message: 'The email or password you entered is incorrect.',
+        suggestion: 'Please check your credentials and try again. If you don\'t have an account yet, you can sign up below.'
+      };
+    }
+    
+    if (message.includes('Email not confirmed')) {
+      return {
+        title: 'Email Not Verified',
+        message: 'Please check your email and click the verification link before signing in.',
+        suggestion: 'Check your inbox (and spam folder) for a verification email from VoiceForm Pro.'
+      };
+    }
+    
+    if (message.includes('Too many requests')) {
+      return {
+        title: 'Too Many Attempts',
+        message: 'Too many login attempts. Please wait a few minutes before trying again.',
+        suggestion: 'For security reasons, please wait before attempting to log in again.'
+      };
+    }
+    
+    return {
+      title: 'Authentication Error',
+      message: message || 'An unexpected error occurred during login.',
+      suggestion: 'Please try again or contact support if the problem persists.'
+    };
+  };
+
   const handleEmailLogin = async (e: React.FormEvent) => {
     e.preventDefault();
     setLoading(true);
@@ -60,7 +95,8 @@ function Login() {
       
       if (error) {
         console.error('Email login error:', error);
-        setError(error.message);
+        const errorInfo = getErrorMessage(error);
+        setError(JSON.stringify(errorInfo));
       } else {
         console.log('Email login successful:', data);
         setSuccess('Login successful! Redirecting...');
@@ -68,7 +104,11 @@ function Login() {
       }
     } catch (err) {
       console.error('Email login exception:', err);
-      setError('An unexpected error occurred');
+      setError(JSON.stringify({
+        title: 'Connection Error',
+        message: 'Unable to connect to the authentication service.',
+        suggestion: 'Please check your internet connection and try again.'
+      }));
     } finally {
       setLoading(false);
     }
@@ -87,7 +127,11 @@ function Login() {
       
       if (error) {
         console.error(`${provider} OAuth error:`, error);
-        setError(`${provider} authentication failed. Please check your Supabase OAuth configuration.`);
+        setError(JSON.stringify({
+          title: 'OAuth Configuration Error',
+          message: `${provider} authentication is not properly configured.`,
+          suggestion: 'Please contact support or try signing in with email instead.'
+        }));
         setOauthLoading(null);
       } else {
         console.log(`${provider} OAuth initiated successfully`);
@@ -95,7 +139,11 @@ function Login() {
       }
     } catch (err) {
       console.error(`${provider} OAuth exception:`, err);
-      setError(`${provider} authentication failed. Please check your Supabase configuration and try again.`);
+      setError(JSON.stringify({
+        title: 'OAuth Error',
+        message: `${provider} authentication failed.`,
+        suggestion: 'Please try again or use email login instead.'
+      }));
       setOauthLoading(null);
     }
   };
@@ -111,6 +159,39 @@ function Login() {
       </div>
     );
   }
+
+  const renderError = () => {
+    if (!error) return null;
+    
+    try {
+      const errorInfo = JSON.parse(error);
+      return (
+        <div className="bg-red-50 border border-red-200 rounded-lg p-4">
+          <div className="flex items-start">
+            <AlertCircle className="w-5 h-5 text-red-600 mr-3 mt-0.5 flex-shrink-0" />
+            <div className="flex-1">
+              <h4 className="text-red-800 text-sm font-medium">{errorInfo.title}</h4>
+              <p className="text-red-700 text-sm mt-1">{errorInfo.message}</p>
+              {errorInfo.suggestion && (
+                <p className="text-red-600 text-xs mt-2">{errorInfo.suggestion}</p>
+              )}
+            </div>
+          </div>
+        </div>
+      );
+    } catch {
+      // Fallback for non-JSON error messages
+      return (
+        <div className="bg-red-50 border border-red-200 rounded-lg p-4 flex items-start">
+          <AlertCircle className="w-5 h-5 text-red-600 mr-3 mt-0.5" />
+          <div>
+            <span className="text-red-800 text-sm font-medium">Authentication Error</span>
+            <p className="text-red-700 text-sm mt-1">{error}</p>
+          </div>
+        </div>
+      );
+    }
+  };
 
   return (
     <div className="min-h-screen bg-gradient-to-br from-blue-50 via-indigo-50 to-purple-50 flex items-center justify-center py-12 px-4 sm:px-6 lg:px-8">
@@ -132,19 +213,27 @@ function Login() {
           </p>
         </div>
 
-        {/* Error/Success Messages */}
-        {error && (
-          <div className="bg-red-50 border border-red-200 rounded-lg p-4 flex items-start">
-            <AlertCircle className="w-5 h-5 text-red-600 mr-3 mt-0.5" />
-            <div>
-              <span className="text-red-800 text-sm font-medium">Authentication Error</span>
-              <p className="text-red-700 text-sm mt-1">{error}</p>
-              <p className="text-red-600 text-xs mt-2">
-                If this persists, please check your Supabase OAuth configuration in the dashboard.
+        {/* Info Notice for New Users */}
+        <div className="bg-blue-50 border border-blue-200 rounded-lg p-4">
+          <div className="flex items-start">
+            <Info className="w-5 h-5 text-blue-600 mr-3 mt-0.5 flex-shrink-0" />
+            <div className="flex-1">
+              <h4 className="text-blue-800 text-sm font-medium">New to VoiceForm Pro?</h4>
+              <p className="text-blue-700 text-sm mt-1">
+                You'll need to create an account first before you can sign in.
               </p>
+              <Link 
+                to="/signup" 
+                className="inline-flex items-center text-blue-600 hover:text-blue-500 text-sm font-medium mt-2 transition-colors"
+              >
+                Create your account <ArrowRight className="w-4 h-4 ml-1" />
+              </Link>
             </div>
           </div>
-        )}
+        </div>
+
+        {/* Error/Success Messages */}
+        {renderError()}
 
         {success && (
           <div className="bg-green-50 border border-green-200 rounded-lg p-4 flex items-center">
