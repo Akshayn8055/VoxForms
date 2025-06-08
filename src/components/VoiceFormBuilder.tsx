@@ -265,7 +265,7 @@ const VoiceFormBuilder: React.FC<VoiceFormBuilderProps> = ({ onClose }) => {
       // Create FormData object for multipart/form-data request
       const formData = new FormData();
       formData.append('file', processedBlob, 'audio.webm');
-      formData.append('model', 'whisper-1');
+      formData.append('model_id', 'whisper-1');
 
       const response = await fetch('https://api.elevenlabs.io/v1/speech-to-text', {
         method: 'POST',
