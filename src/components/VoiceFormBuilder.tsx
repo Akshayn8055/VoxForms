@@ -53,92 +53,167 @@ const VoiceFormBuilder: React.FC<VoiceFormBuilderProps> = ({ onClose }) => {
   const [isSaving, setIsSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [success, setSuccess] = useState<string | null>(null);
+  const [isPlayingAudio, setIsPlayingAudio] = useState(false);
 
   const mediaRecorderRef = useRef<MediaRecorder | null>(null);
   const audioChunksRef = useRef<Blob[]>([]);
-  const recognitionRef = useRef<SpeechRecognition | null>(null);
+  const audioRef = useRef<HTMLAudioElement | null>(null);
 
-  // Initialize speech recognition
-  useEffect(() => {
-    if ('webkitSpeechRecognition' in window || 'SpeechRecognition' in window) {
-      const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
-      recognitionRef.current = new SpeechRecognition();
-      recognitionRef.current.continuous = true;
-      recognitionRef.current.interimResults = true;
-      recognitionRef.current.lang = 'en-US';
-
-      recognitionRef.current.onresult = (event) => {
-        let finalTranscript = '';
-        for (let i = event.resultIndex; i < event.results.length; i++) {
-          if (event.results[i].isFinal) {
-            finalTranscript += event.results[i][0].transcript;
-          }
-        }
-        if (finalTranscript) {
-          setTranscript(prev => prev + ' ' + finalTranscript);
-        }
-      };
-
-      recognitionRef.current.onerror = (event) => {
-        console.error('Speech recognition error:', event.error);
-        setError('Speech recognition error. Please try again.');
-        setIsListening(false);
-      };
-
-      recognitionRef.current.onend = () => {
-        setIsListening(false);
-      };
-    }
-
-    return () => {
-      if (recognitionRef.current) {
-        recognitionRef.current.stop();
-      }
-    };
-  }, []);
+  // ElevenLabs API configuration
+  const ELEVENLABS_API_KEY = import.meta.env.VITE_ELEVENLABS_API_KEY || 'your-elevenlabs-api-key';
+  const ELEVENLABS_VOICE_ID = 'pNInz6obpgDQGcFmaJgB'; // Default voice ID (Adam)
 
   const startListening = async () => {
     try {
       setError(null);
       setIsListening(true);
+      setTranscript('');
+      audioChunksRef.current = [];
+
+      const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+      mediaRecorderRef.current = new MediaRecorder(stream);
+
+      mediaRecorderRef.current.ondataavailable = (event) => {
+        if (event.data.size > 0) {
+          audioChunksRef.current.push(event.data);
+        }
+      };
+
+      mediaRecorderRef.current.onstop = async () => {
+        const audioBlob = new Blob(audioChunksRef.current, { type: 'audio/wav' });
+        await processAudioWithElevenLabs(audioBlob);
+        
+        // Stop all tracks to release microphone
+        stream.getTracks().forEach(track => track.stop());
+      };
+
+      mediaRecorderRef.current.start();
       
-      if (recognitionRef.current) {
-        recognitionRef.current.start();
-      }
+      // Provide audio feedback
+      await playAudioFeedback('Recording started. Please speak your form requirements.');
+      
     } catch (error) {
-      console.error('Error starting speech recognition:', error);
-      setError('Failed to start voice recognition. Please check your microphone permissions.');
+      console.error('Error starting recording:', error);
+      setError('Failed to start voice recording. Please check your microphone permissions.');
       setIsListening(false);
     }
   };
 
   const stopListening = () => {
-    if (recognitionRef.current) {
-      recognitionRef.current.stop();
+    if (mediaRecorderRef.current && mediaRecorderRef.current.state === 'recording') {
+      mediaRecorderRef.current.stop();
     }
     setIsListening(false);
+  };
+
+  const processAudioWithElevenLabs = async (audioBlob: Blob) => {
+    setIsProcessing(true);
     
-    if (transcript.trim()) {
-      processVoiceCommand(transcript.trim());
+    try {
+      // Convert audio to text using ElevenLabs Speech-to-Text
+      const transcriptText = await speechToText(audioBlob);
+      setTranscript(transcriptText);
+      
+      if (transcriptText.trim()) {
+        const processedForm = await parseVoiceToForm(transcriptText.trim());
+        setCurrentForm(prev => ({
+          ...prev,
+          ...processedForm,
+          updatedAt: new Date().toISOString()
+        }));
+        
+        // Provide audio confirmation
+        await playAudioFeedback(`Form updated successfully. Added ${processedForm.fields?.length || 0} new fields.`);
+        setSuccess('Form updated successfully!');
+      }
+    } catch (error) {
+      console.error('Error processing audio:', error);
+      setError('Failed to process voice command. Please try again.');
+      await playAudioFeedback('Sorry, I could not process your voice command. Please try again.');
+    } finally {
+      setIsProcessing(false);
     }
   };
 
-  const processVoiceCommand = async (command: string) => {
-    setIsProcessing(true);
+  const speechToText = async (audioBlob: Blob): Promise<string> => {
+    // Convert blob to base64 for ElevenLabs API
+    const arrayBuffer = await audioBlob.arrayBuffer();
+    const base64Audio = btoa(String.fromCharCode(...new Uint8Array(arrayBuffer)));
+
+    const response = await fetch('https://api.elevenlabs.io/v1/speech-to-text', {
+      method: 'POST',
+      headers: {
+        'Accept': 'application/json',
+        'xi-api-key': ELEVENLABS_API_KEY,
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({
+        audio: base64Audio,
+        model_id: 'whisper-1'
+      }),
+    });
+
+    if (!response.ok) {
+      throw new Error(`ElevenLabs API error: ${response.status}`);
+    }
+
+    const result = await response.json();
+    return result.text || '';
+  };
+
+  const textToSpeech = async (text: string): Promise<Blob> => {
+    const response = await fetch(`https://api.elevenlabs.io/v1/text-to-speech/${ELEVENLABS_VOICE_ID}`, {
+      method: 'POST',
+      headers: {
+        'Accept': 'audio/mpeg',
+        'Content-Type': 'application/json',
+        'xi-api-key': ELEVENLABS_API_KEY,
+      },
+      body: JSON.stringify({
+        text: text,
+        model_id: 'eleven_monolingual_v1',
+        voice_settings: {
+          stability: 0.5,
+          similarity_boost: 0.5
+        }
+      }),
+    });
+
+    if (!response.ok) {
+      throw new Error(`ElevenLabs TTS API error: ${response.status}`);
+    }
+
+    return await response.blob();
+  };
+
+  const playAudioFeedback = async (text: string) => {
     try {
-      const processedForm = await parseVoiceToForm(command);
-      setCurrentForm(prev => ({
-        ...prev,
-        ...processedForm,
-        updatedAt: new Date().toISOString()
-      }));
-      setTranscript('');
-      setSuccess('Form updated successfully!');
+      setIsPlayingAudio(true);
+      const audioBlob = await textToSpeech(text);
+      const audioUrl = URL.createObjectURL(audioBlob);
+      
+      if (audioRef.current) {
+        audioRef.current.pause();
+      }
+      
+      audioRef.current = new Audio(audioUrl);
+      audioRef.current.onended = () => {
+        setIsPlayingAudio(false);
+        URL.revokeObjectURL(audioUrl);
+      };
+      
+      await audioRef.current.play();
     } catch (error) {
-      console.error('Error processing voice command:', error);
-      setError('Failed to process voice command. Please try again.');
-    } finally {
-      setIsProcessing(false);
+      console.error('Error playing audio feedback:', error);
+      setIsPlayingAudio(false);
+    }
+  };
+
+  const stopAudioFeedback = () => {
+    if (audioRef.current) {
+      audioRef.current.pause();
+      audioRef.current.currentTime = 0;
+      setIsPlayingAudio(false);
     }
   };
 
@@ -167,13 +242,15 @@ const VoiceFormBuilder: React.FC<VoiceFormBuilderProps> = ({ onClose }) => {
       formDescription = descMatch[1].trim();
     }
 
-    // Parse fields based on voice commands
+    // Enhanced field parsing with more patterns
     const fieldPatterns = [
       // Text fields
       { pattern: /(?:add|include|create)\s+(?:a|an)?\s*(?:text|input)?\s*field\s+(?:for|called|named)\s*["']?([^"']+)["']?/g, type: 'text' },
       { pattern: /(?:add|include|create)\s+(?:a|an)?\s*name\s*field/g, type: 'text', label: 'Full Name' },
       { pattern: /(?:add|include|create)\s+(?:a|an)?\s*first\s*name\s*field/g, type: 'text', label: 'First Name' },
       { pattern: /(?:add|include|create)\s+(?:a|an)?\s*last\s*name\s*field/g, type: 'text', label: 'Last Name' },
+      { pattern: /(?:add|include|create)\s+(?:a|an)?\s*address\s*field/g, type: 'text', label: 'Address' },
+      { pattern: /(?:add|include|create)\s+(?:a|an)?\s*company\s*field/g, type: 'text', label: 'Company' },
       
       // Email fields
       { pattern: /(?:add|include|create)\s+(?:a|an)?\s*email\s*(?:field|address)?/g, type: 'email', label: 'Email Address' },
@@ -198,6 +275,9 @@ const VoiceFormBuilder: React.FC<VoiceFormBuilderProps> = ({ onClose }) => {
       
       // Radio fields
       { pattern: /(?:add|include|create)\s+(?:a|an)?\s*radio\s*(?:button|field)?\s*(?:for|called|named)\s*["']?([^"']+)["']?/g, type: 'radio' },
+      
+      // File upload fields
+      { pattern: /(?:add|include|create)\s+(?:a|an)?\s*(?:file|upload)\s*field/g, type: 'file', label: 'File Upload' },
     ];
 
     fieldPatterns.forEach(({ pattern, type, label: defaultLabel }) => {
@@ -229,6 +309,29 @@ const VoiceFormBuilder: React.FC<VoiceFormBuilderProps> = ({ onClose }) => {
       if (lastField.type === 'select' || lastField.type === 'radio') {
         const options = optionsMatch[1].split(/,|\sand\s|\sor\s/).map(opt => opt.trim()).filter(opt => opt);
         lastField.options = options;
+      }
+    }
+
+    // Handle field modifications
+    if (lowerCommand.includes('make') && lowerCommand.includes('required')) {
+      const fieldNameMatch = lowerCommand.match(/make\s+(?:the\s+)?([^"']+?)\s+(?:field\s+)?required/);
+      if (fieldNameMatch) {
+        const fieldName = fieldNameMatch[1].trim();
+        fields = fields.map(field => 
+          field.label.toLowerCase().includes(fieldName.toLowerCase()) 
+            ? { ...field, required: true }
+            : field
+        );
+      }
+    }
+
+    if (lowerCommand.includes('remove') || lowerCommand.includes('delete')) {
+      const removeMatch = lowerCommand.match(/(?:remove|delete)\s+(?:the\s+)?([^"']+?)\s*field/);
+      if (removeMatch) {
+        const fieldName = removeMatch[1].trim();
+        fields = fields.filter(field => 
+          !field.label.toLowerCase().includes(fieldName.toLowerCase())
+        );
       }
     }
 
@@ -314,6 +417,9 @@ const VoiceFormBuilder: React.FC<VoiceFormBuilderProps> = ({ onClose }) => {
       
       setSuccess('Form saved successfully!');
       setShowSaveDialog(false);
+      
+      // Audio confirmation
+      await playAudioFeedback('Form has been saved successfully and is ready to share.');
     } catch (error) {
       setError('Failed to save form. Please try again.');
     } finally {
@@ -326,6 +432,11 @@ const VoiceFormBuilder: React.FC<VoiceFormBuilderProps> = ({ onClose }) => {
       navigator.clipboard.writeText(currentForm.shareUrl);
       setSuccess('Share link copied to clipboard!');
     }
+  };
+
+  const readFormSummary = async () => {
+    const summary = `Your form "${currentForm.name || 'Untitled Form'}" contains ${currentForm.fields.length} fields: ${currentForm.fields.map(f => f.label).join(', ')}. ${currentForm.description ? `Description: ${currentForm.description}` : ''}`;
+    await playAudioFeedback(summary);
   };
 
   const fieldTypes = [
@@ -341,6 +452,15 @@ const VoiceFormBuilder: React.FC<VoiceFormBuilderProps> = ({ onClose }) => {
     { type: 'file', label: 'File Upload', icon: Upload },
   ];
 
+  // Cleanup audio on unmount
+  useEffect(() => {
+    return () => {
+      if (audioRef.current) {
+        audioRef.current.pause();
+      }
+    };
+  }, []);
+
   return (
     <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
       <div className="bg-white rounded-2xl max-w-6xl w-full max-h-[95vh] overflow-hidden flex">
@@ -349,7 +469,7 @@ const VoiceFormBuilder: React.FC<VoiceFormBuilderProps> = ({ onClose }) => {
           {/* Header */}
           <div className="p-6 border-b border-gray-200">
             <div className="flex items-center justify-between mb-4">
-              <h2 className="text-2xl font-bold text-gray-900">Voice Form Builder</h2>
+              <h2 className="text-2xl font-bold text-gray-900">AI Voice Form Builder</h2>
               <button onClick={onClose} className="text-gray-400 hover:text-gray-600">
                 <X className="w-6 h-6" />
               </button>
@@ -386,18 +506,39 @@ const VoiceFormBuilder: React.FC<VoiceFormBuilderProps> = ({ onClose }) => {
 
           {/* Voice Controls */}
           <div className="p-6 border-b border-gray-200">
-            <h3 className="text-lg font-semibold text-gray-900 mb-4">Voice Commands</h3>
+            <div className="flex items-center justify-between mb-4">
+              <h3 className="text-lg font-semibold text-gray-900">ElevenLabs Voice AI</h3>
+              <div className="flex items-center space-x-2">
+                <button
+                  onClick={readFormSummary}
+                  disabled={isPlayingAudio || currentForm.fields.length === 0}
+                  className="p-2 text-blue-600 hover:bg-blue-50 rounded-lg transition-colors disabled:opacity-50"
+                  title="Read form summary"
+                >
+                  <Volume2 className="w-4 h-4" />
+                </button>
+                {isPlayingAudio && (
+                  <button
+                    onClick={stopAudioFeedback}
+                    className="p-2 text-red-600 hover:bg-red-50 rounded-lg transition-colors"
+                    title="Stop audio"
+                  >
+                    <VolumeX className="w-4 h-4" />
+                  </button>
+                )}
+              </div>
+            </div>
             
             {/* Voice Recording Button */}
             <div className="text-center mb-4">
               <button
                 onClick={isListening ? stopListening : startListening}
-                disabled={isProcessing}
+                disabled={isProcessing || isPlayingAudio}
                 className={`w-20 h-20 rounded-full flex items-center justify-center transition-all ${
                   isListening 
                     ? 'bg-red-500 hover:bg-red-600 animate-pulse' 
                     : 'bg-blue-500 hover:bg-blue-600'
-                } text-white disabled:opacity-50`}
+                } text-white disabled:opacity-50 shadow-lg`}
               >
                 {isProcessing ? (
                   <Loader2 className="w-8 h-8 animate-spin" />
@@ -408,7 +549,9 @@ const VoiceFormBuilder: React.FC<VoiceFormBuilderProps> = ({ onClose }) => {
                 )}
               </button>
               <p className="text-sm text-gray-600 mt-2">
-                {isProcessing ? 'Processing...' : isListening ? 'Listening... Click to stop' : 'Click to start voice input'}
+                {isProcessing ? 'Processing with ElevenLabs...' : 
+                 isListening ? 'Recording... Click to stop' : 
+                 'Click to start voice input'}
               </p>
             </div>
 
@@ -425,9 +568,10 @@ const VoiceFormBuilder: React.FC<VoiceFormBuilderProps> = ({ onClose }) => {
               <ul className="text-sm text-blue-700 space-y-1">
                 <li>• "Create a contact form"</li>
                 <li>• "Add an email field"</li>
-                <li>• "Add a dropdown for country"</li>
+                <li>• "Add a dropdown for country with options USA, Canada, UK"</li>
                 <li>• "Make the name field required"</li>
-                <li>• "Add options: Yes, No, Maybe"</li>
+                <li>• "Remove the phone field"</li>
+                <li>• "Add a file upload field"</li>
               </ul>
             </div>
           </div>
@@ -507,7 +651,7 @@ const VoiceFormBuilder: React.FC<VoiceFormBuilderProps> = ({ onClose }) => {
             </div>
             
             <div className="flex items-center justify-between text-sm text-gray-500">
-              <span>{currentForm.fields.length} fields</span>
+              <span>{currentForm.fields.length} fields • Powered by ElevenLabs AI</span>
               <span>Last updated: {new Date(currentForm.updatedAt).toLocaleString()}</span>
             </div>
           </div>
@@ -519,6 +663,7 @@ const VoiceFormBuilder: React.FC<VoiceFormBuilderProps> = ({ onClose }) => {
                 <Mic className="w-12 h-12 text-gray-400 mx-auto mb-4" />
                 <h3 className="text-lg font-medium text-gray-900 mb-2">No fields yet</h3>
                 <p className="text-gray-600">Use voice commands or manual controls to add form fields</p>
+                <p className="text-sm text-blue-600 mt-2">Try saying: "Create a contact form with name and email fields"</p>
               </div>
             ) : (
               <div className="space-y-6">
@@ -777,6 +922,7 @@ const VoiceFormBuilder: React.FC<VoiceFormBuilderProps> = ({ onClose }) => {
                   <li>• {currentForm.fields.length} fields</li>
                   <li>• {currentForm.isPublic ? 'Public access' : 'Private access'}</li>
                   <li>• Responses will be collected automatically</li>
+                  <li>• Powered by ElevenLabs AI</li>
                 </ul>
               </div>
             </div>
