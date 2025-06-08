@@ -26,28 +26,59 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
 
   useEffect(() => {
     // Get initial session
-    supabase.auth.getSession().then(({ data: { session } }) => {
-      setSession(session)
-      setUser(session?.user ?? null)
-      setLoading(false)
-    })
+    const getInitialSession = async () => {
+      try {
+        const { data: { session }, error } = await supabase.auth.getSession()
+        if (error) {
+          console.error('Error getting initial session:', error)
+        } else {
+          console.log('Initial session:', session?.user?.email || 'No session')
+          setSession(session)
+          setUser(session?.user ?? null)
+        }
+      } catch (error) {
+        console.error('Exception getting initial session:', error)
+      } finally {
+        setLoading(false)
+      }
+    }
+
+    getInitialSession()
 
     // Listen for auth changes
     const {
       data: { subscription },
-    } = supabase.auth.onAuthStateChange((_event, session) => {
-      console.log('Auth state changed:', _event, session?.user?.email)
+    } = supabase.auth.onAuthStateChange(async (event, session) => {
+      console.log('Auth state changed:', event, session?.user?.email || 'No user')
+      
       setSession(session)
       setUser(session?.user ?? null)
       setLoading(false)
+
+      // Handle successful OAuth login
+      if (event === 'SIGNED_IN' && session) {
+        console.log('User signed in successfully, redirecting to dashboard')
+        // The redirect will be handled by the component that's listening to auth state
+      }
+
+      // Handle sign out
+      if (event === 'SIGNED_OUT') {
+        console.log('User signed out')
+        setUser(null)
+        setSession(null)
+      }
     })
 
-    return () => subscription.unsubscribe()
+    return () => {
+      console.log('Cleaning up auth subscription')
+      subscription.unsubscribe()
+    }
   }, [])
 
   const signOut = async () => {
     try {
       console.log('Signing out user...')
+      setLoading(true)
       const { error } = await supabase.auth.signOut()
       if (error) {
         console.error('Sign out error:', error)
@@ -60,6 +91,8 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     } catch (error) {
       console.error('Failed to sign out:', error)
       throw error
+    } finally {
+      setLoading(false)
     }
   }
 

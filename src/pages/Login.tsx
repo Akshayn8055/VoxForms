@@ -27,14 +27,15 @@ function Login() {
   
   const navigate = useNavigate();
   const [searchParams] = useSearchParams();
-  const { user } = useAuth();
+  const { user, loading: authLoading } = useAuth();
 
   // Redirect if already logged in
   useEffect(() => {
-    if (user) {
+    if (!authLoading && user) {
+      console.log('User already logged in, redirecting to dashboard');
       navigate('/dashboard');
     }
-  }, [user, navigate]);
+  }, [user, authLoading, navigate]);
 
   // Handle OAuth callback messages
   useEffect(() => {
@@ -42,6 +43,7 @@ function Login() {
     const errorDescription = searchParams.get('error_description');
     
     if (error) {
+      console.error('OAuth error from URL params:', error, errorDescription);
       setError(errorDescription || 'Authentication failed');
     }
   }, [searchParams]);
@@ -50,17 +52,22 @@ function Login() {
     e.preventDefault();
     setLoading(true);
     setError(null);
+    setSuccess(null);
 
     try {
-      const { error } = await signInWithEmail(email, password);
+      console.log('Attempting email login for:', email);
+      const { data, error } = await signInWithEmail(email, password);
       
       if (error) {
+        console.error('Email login error:', error);
         setError(error.message);
       } else {
+        console.log('Email login successful:', data);
         setSuccess('Login successful! Redirecting...');
-        setTimeout(() => navigate('/dashboard'), 1000);
+        // The AuthContext will handle the redirect automatically
       }
     } catch (err) {
+      console.error('Email login exception:', err);
       setError('An unexpected error occurred');
     } finally {
       setLoading(false);
@@ -76,7 +83,7 @@ function Login() {
       console.log('Current URL:', window.location.origin);
       console.log('Supabase URL:', import.meta.env.VITE_SUPABASE_URL);
       
-      const { error } = await signInWithOAuth(provider);
+      const { data, error } = await signInWithOAuth(provider);
       
       if (error) {
         console.error(`${provider} OAuth error:`, error);
@@ -92,6 +99,18 @@ function Login() {
       setOauthLoading(null);
     }
   };
+
+  // Show loading spinner while checking auth state
+  if (authLoading) {
+    return (
+      <div className="min-h-screen bg-gradient-to-br from-blue-50 via-indigo-50 to-purple-50 flex items-center justify-center">
+        <div className="text-center">
+          <Loader2 className="w-8 h-8 animate-spin text-blue-600 mx-auto mb-4" />
+          <p className="text-gray-600">Checking authentication...</p>
+        </div>
+      </div>
+    );
+  }
 
   return (
     <div className="min-h-screen bg-gradient-to-br from-blue-50 via-indigo-50 to-purple-50 flex items-center justify-center py-12 px-4 sm:px-6 lg:px-8">
@@ -138,7 +157,7 @@ function Login() {
         <div className="space-y-3">
           <button
             onClick={() => handleOAuthLogin('google')}
-            disabled={!!oauthLoading}
+            disabled={!!oauthLoading || loading}
             className="w-full flex items-center justify-center px-4 py-3 border border-gray-300 rounded-lg shadow-sm bg-white text-gray-700 hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent transition-all disabled:opacity-50 disabled:cursor-not-allowed"
           >
             {oauthLoading === 'google' ? (
@@ -151,7 +170,7 @@ function Login() {
 
           <button
             onClick={() => handleOAuthLogin('microsoft')}
-            disabled={!!oauthLoading}
+            disabled={!!oauthLoading || loading}
             className="w-full flex items-center justify-center px-4 py-3 border border-gray-300 rounded-lg shadow-sm bg-white text-gray-700 hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent transition-all disabled:opacity-50 disabled:cursor-not-allowed"
           >
             {oauthLoading === 'microsoft' ? (
@@ -257,7 +276,7 @@ function Login() {
 
             <button
               type="submit"
-              disabled={loading}
+              disabled={loading || !!oauthLoading}
               className="w-full flex justify-center items-center py-3 px-4 border border-transparent rounded-lg shadow-sm text-sm font-medium text-white bg-gradient-to-r from-blue-600 to-purple-600 hover:from-blue-700 hover:to-purple-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500 transition-all disabled:opacity-50 disabled:cursor-not-allowed"
             >
               {loading ? (
