@@ -1,45 +1,5 @@
 import React, { useState, useRef, useEffect } from 'react';
-import {
-  Mic,
-  MicOff,
-  Play,
-  Pause,
-  Square,
-  Save,
-  Share2,
-  Edit3,
-  Trash2,
-  Plus,
-  Eye,
-  EyeOff,
-  Type,
-  Mail,
-  Phone,
-  Calendar,
-  Hash,
-  ToggleLeft,
-  List,
-  FileText,
-  Star,
-  MapPin,
-  Clock,
-  DollarSign,
-  Link as LinkIcon,
-  Image,
-  Upload,
-  CheckSquare,
-  Radio,
-  Slider,
-  X,
-  Check,
-  AlertCircle,
-  Loader2,
-  Volume2,
-  VolumeX,
-  Settings,
-  Copy,
-  ExternalLink
-} from 'lucide-react';
+import { Mic, MicOff, Play, Pause, Square, Save, Share2, Edit3, Trash2, Plus, Eye, EyeOff, Type, Mail, Phone, Calendar, Hash, ToggleLeft, List, FileText, Star, MapPin, Clock, DollarSign, Link as LinkIcon, Image, Upload, CheckSquare, Radio, Sliders as Slider, X, Check, AlertCircle, Loader2, Volume2, VolumeX, Settings, Copy, ExternalLink } from 'lucide-react';
 import { v4 as uuidv4 } from 'uuid';
 
 interface FormField {
