@@ -284,7 +284,36 @@ const VoiceFormBuilder: React.FC<VoiceFormBuilderProps> = ({ onClose }) => {
         try {
           const errorData = JSON.parse(errorText);
           if (errorData.detail) {
-            errorMessage += ` - ${errorData.detail}`;
+            // Handle different types of detail responses
+            if (typeof errorData.detail === 'string') {
+              errorMessage += ` - ${errorData.detail}`;
+            } else if (Array.isArray(errorData.detail)) {
+              // If detail is an array of error objects
+              const messages = errorData.detail.map((item: any) => {
+                if (typeof item === 'string') return item;
+                if (item.msg) return item.msg;
+                if (item.message) return item.message;
+                return JSON.stringify(item);
+              }).join(', ');
+              errorMessage += ` - ${messages}`;
+            } else if (typeof errorData.detail === 'object') {
+              // If detail is an object
+              if (errorData.detail.msg) {
+                errorMessage += ` - ${errorData.detail.msg}`;
+              } else if (errorData.detail.message) {
+                errorMessage += ` - ${errorData.detail.message}`;
+              } else {
+                // Extract meaningful information from the object
+                const detailStr = Object.entries(errorData.detail)
+                  .map(([key, value]) => `${key}: ${value}`)
+                  .join(', ');
+                errorMessage += ` - ${detailStr}`;
+              }
+            }
+          } else if (errorData.message) {
+            errorMessage += ` - ${errorData.message}`;
+          } else if (errorData.error) {
+            errorMessage += ` - ${errorData.error}`;
           }
         } catch {
           // If error response is not JSON, use the text
