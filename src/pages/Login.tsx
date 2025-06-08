@@ -12,7 +12,8 @@ import {
   ArrowRight,
   Chrome,
   Loader2,
-  Info
+  Info,
+  UserPlus
 } from 'lucide-react';
 import { signInWithEmail, signInWithOAuth } from '../lib/supabase';
 import { useAuth } from '../contexts/AuthContext';
@@ -56,7 +57,8 @@ function Login() {
       return {
         title: 'Login Failed',
         message: 'The email or password you entered is incorrect.',
-        suggestion: 'Please check your credentials and try again. If you don\'t have an account yet, you can sign up below.'
+        suggestion: 'Please check your credentials and try again. If you don\'t have an account yet, you can sign up below.',
+        showSignupPrompt: true
       };
     }
     
@@ -75,6 +77,15 @@ function Login() {
         suggestion: 'For security reasons, please wait before attempting to log in again.'
       };
     }
+
+    if (message.includes('User not found')) {
+      return {
+        title: 'Account Not Found',
+        message: 'No account found with this email address.',
+        suggestion: 'Please check your email address or create a new account.',
+        showSignupPrompt: true
+      };
+    }
     
     return {
       title: 'Authentication Error',
@@ -89,12 +100,47 @@ function Login() {
     setError(null);
     setSuccess(null);
 
+    // Basic validation
+    if (!email || !password) {
+      setError(JSON.stringify({
+        title: 'Missing Information',
+        message: 'Please enter both email and password.',
+        suggestion: 'Both fields are required to sign in.'
+      }));
+      setLoading(false);
+      return;
+    }
+
+    // Email format validation
+    const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+    if (!emailRegex.test(email)) {
+      setError(JSON.stringify({
+        title: 'Invalid Email Format',
+        message: 'Please enter a valid email address.',
+        suggestion: 'Make sure your email address is in the correct format (e.g., user@example.com).'
+      }));
+      setLoading(false);
+      return;
+    }
+
     try {
       console.log('Attempting email login for:', email);
+      console.log('Supabase URL:', import.meta.env.VITE_SUPABASE_URL);
+      console.log('Environment check:', {
+        hasSupabaseUrl: !!import.meta.env.VITE_SUPABASE_URL,
+        hasAnonKey: !!import.meta.env.VITE_SUPABASE_ANON_KEY
+      });
+
       const { data, error } = await signInWithEmail(email, password);
       
       if (error) {
         console.error('Email login error:', error);
+        console.error('Error details:', {
+          message: error.message,
+          status: error.status,
+          statusText: error.statusText
+        });
+        
         const errorInfo = getErrorMessage(error);
         setError(JSON.stringify(errorInfo));
       } else {
@@ -107,7 +153,7 @@ function Login() {
       setError(JSON.stringify({
         title: 'Connection Error',
         message: 'Unable to connect to the authentication service.',
-        suggestion: 'Please check your internet connection and try again.'
+        suggestion: 'Please check your internet connection and try again. If the problem persists, the service may be temporarily unavailable.'
       }));
     } finally {
       setLoading(false);
@@ -175,6 +221,17 @@ function Login() {
               {errorInfo.suggestion && (
                 <p className="text-red-600 text-xs mt-2">{errorInfo.suggestion}</p>
               )}
+              {errorInfo.showSignupPrompt && (
+                <div className="mt-3">
+                  <Link 
+                    to="/signup" 
+                    className="inline-flex items-center px-3 py-1.5 bg-red-100 hover:bg-red-200 text-red-800 text-xs font-medium rounded-md transition-colors"
+                  >
+                    <UserPlus className="w-3 h-3 mr-1" />
+                    Create Account
+                  </Link>
+                </div>
+              )}
             </div>
           </div>
         </div>
@@ -212,6 +269,21 @@ function Login() {
             Sign in to access your voice-powered forms and continue transforming your workflow.
           </p>
         </div>
+
+        {/* Configuration Check Notice */}
+        {(!import.meta.env.VITE_SUPABASE_URL || !import.meta.env.VITE_SUPABASE_ANON_KEY) && (
+          <div className="bg-yellow-50 border border-yellow-200 rounded-lg p-4">
+            <div className="flex items-start">
+              <AlertCircle className="w-5 h-5 text-yellow-600 mr-3 mt-0.5 flex-shrink-0" />
+              <div className="flex-1">
+                <h4 className="text-yellow-800 text-sm font-medium">Configuration Required</h4>
+                <p className="text-yellow-700 text-sm mt-1">
+                  Supabase environment variables are not configured. Please set up your .env file with the correct Supabase URL and API key.
+                </p>
+              </div>
+            </div>
+          </div>
+        )}
 
         {/* Info Notice for New Users */}
         <div className="bg-blue-50 border border-blue-200 rounded-lg p-4">
