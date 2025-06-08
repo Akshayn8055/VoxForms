@@ -195,23 +195,19 @@ const VoiceFormBuilder: React.FC<VoiceFormBuilderProps> = ({ onClose }) => {
 
   const speechToText = async (audioBlob: Blob): Promise<string> => {
     try {
-      // Convert blob to base64 using FileReader to avoid call stack issues
-      const base64Audio = await blobToBase64(audioBlob);
-      
-      // Remove the data URL prefix to get just the base64 string
-      const base64Data = base64Audio.split(',')[1];
+      // Create FormData object for multipart/form-data request
+      const formData = new FormData();
+      formData.append('file', audioBlob, 'audio.wav');
+      formData.append('model_id', 'whisper-1');
 
       const response = await fetch('https://api.elevenlabs.io/v1/speech-to-text', {
         method: 'POST',
         headers: {
           'Accept': 'application/json',
           'xi-api-key': ELEVENLABS_API_KEY,
-          'Content-Type': 'application/json',
+          // Note: Don't set Content-Type header - let fetch set it automatically for FormData
         },
-        body: JSON.stringify({
-          audio: base64Data,
-          model_id: 'whisper-1'
-        }),
+        body: formData,
       });
 
       if (!response.ok) {
@@ -225,21 +221,6 @@ const VoiceFormBuilder: React.FC<VoiceFormBuilderProps> = ({ onClose }) => {
       // Fallback to browser speech recognition
       throw error;
     }
-  };
-
-  const blobToBase64 = (blob: Blob): Promise<string> => {
-    return new Promise((resolve, reject) => {
-      const reader = new FileReader();
-      reader.onload = () => {
-        if (typeof reader.result === 'string') {
-          resolve(reader.result);
-        } else {
-          reject(new Error('Failed to convert blob to base64'));
-        }
-      };
-      reader.onerror = () => reject(new Error('FileReader error'));
-      reader.readAsDataURL(blob);
-    });
   };
 
   const textToSpeech = async (text: string): Promise<Blob> => {
