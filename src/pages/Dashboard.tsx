@@ -145,15 +145,6 @@ function Dashboard() {
     }
   };
 
-  const stats = {
-    totalSubmissions: contactSubmissions.length,
-    newSubmissions: contactSubmissions.filter(s => s.status === 'new').length,
-    qualifiedLeads: contactSubmissions.filter(s => s.status === 'qualified').length,
-    closedDeals: contactSubmissions.filter(s => s.status === 'closed').length,
-  };
-
-  const recentSubmissions = contactSubmissions.slice(0, 5);
-
   if (loading) {
     return (
       <div className="min-h-screen bg-gray-50 flex items-center justify-center">
@@ -217,102 +208,15 @@ function Dashboard() {
                     : 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300'
                 }`}
               >
-                Contact Submissions ({stats.totalSubmissions})
-              </button>
-              <button
-                onClick={() => setSelectedTab('forms')}
-                className={`py-2 px-1 border-b-2 font-medium text-sm ${
-                  selectedTab === 'forms'
-                    ? 'border-blue-500 text-blue-600'
-                    : 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300'
-                }`}
-              >
-                My Forms
-              </button>
-              <button
-                onClick={() => setSelectedTab('analytics')}
-                className={`py-2 px-1 border-b-2 font-medium text-sm ${
-                  selectedTab === 'analytics'
-                    ? 'border-blue-500 text-blue-600'
-                    : 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300'
-                }`}
-              >
-                Analytics
+                Contact Submissions ({contactSubmissions.length})
               </button>
             </nav>
           </div>
         </div>
 
-        {/* Overview Tab */}
+        {/* Overview Tab - Original Design */}
         {selectedTab === 'overview' && (
           <>
-            {/* Stats Cards */}
-            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6 mb-8">
-              <div className="bg-white rounded-2xl p-6 border border-gray-200">
-                <div className="flex items-center justify-between">
-                  <div>
-                    <p className="text-sm font-medium text-gray-600">Total Submissions</p>
-                    <p className="text-2xl font-bold text-gray-900">{stats.totalSubmissions}</p>
-                  </div>
-                  <div className="w-12 h-12 bg-blue-100 rounded-lg flex items-center justify-center">
-                    <Mail className="w-6 h-6 text-blue-600" />
-                  </div>
-                </div>
-                <div className="mt-4 flex items-center text-sm text-green-600">
-                  <TrendingUp className="w-4 h-4 mr-1" />
-                  <span>+12% from last month</span>
-                </div>
-              </div>
-
-              <div className="bg-white rounded-2xl p-6 border border-gray-200">
-                <div className="flex items-center justify-between">
-                  <div>
-                    <p className="text-sm font-medium text-gray-600">New Submissions</p>
-                    <p className="text-2xl font-bold text-gray-900">{stats.newSubmissions}</p>
-                  </div>
-                  <div className="w-12 h-12 bg-yellow-100 rounded-lg flex items-center justify-center">
-                    <AlertCircle className="w-6 h-6 text-yellow-600" />
-                  </div>
-                </div>
-                <div className="mt-4 flex items-center text-sm text-yellow-600">
-                  <Clock className="w-4 h-4 mr-1" />
-                  <span>Needs attention</span>
-                </div>
-              </div>
-
-              <div className="bg-white rounded-2xl p-6 border border-gray-200">
-                <div className="flex items-center justify-between">
-                  <div>
-                    <p className="text-sm font-medium text-gray-600">Qualified Leads</p>
-                    <p className="text-2xl font-bold text-gray-900">{stats.qualifiedLeads}</p>
-                  </div>
-                  <div className="w-12 h-12 bg-purple-100 rounded-lg flex items-center justify-center">
-                    <Star className="w-6 h-6 text-purple-600" />
-                  </div>
-                </div>
-                <div className="mt-4 flex items-center text-sm text-purple-600">
-                  <TrendingUp className="w-4 h-4 mr-1" />
-                  <span>High potential</span>
-                </div>
-              </div>
-
-              <div className="bg-white rounded-2xl p-6 border border-gray-200">
-                <div className="flex items-center justify-between">
-                  <div>
-                    <p className="text-sm font-medium text-gray-600">Closed Deals</p>
-                    <p className="text-2xl font-bold text-gray-900">{stats.closedDeals}</p>
-                  </div>
-                  <div className="w-12 h-12 bg-green-100 rounded-lg flex items-center justify-center">
-                    <CheckCircle className="w-6 h-6 text-green-600" />
-                  </div>
-                </div>
-                <div className="mt-4 flex items-center text-sm text-green-600">
-                  <CheckCircle className="w-4 h-4 mr-1" />
-                  <span>Successful conversions</span>
-                </div>
-              </div>
-            </div>
-
             {/* Quick Actions */}
             <div className="grid md:grid-cols-2 lg:grid-cols-4 gap-6 mb-8">
               <button 
@@ -339,10 +243,7 @@ function Dashboard() {
                 <p className="text-emerald-100 text-sm">Browse and manage form templates</p>
               </Link>
 
-              <button 
-                onClick={() => setSelectedTab('analytics')}
-                className="bg-gradient-to-br from-purple-500 to-purple-600 text-white p-6 rounded-2xl hover:from-purple-600 hover:to-purple-700 transition-all transform hover:scale-105"
-              >
+              <button className="bg-gradient-to-br from-purple-500 to-purple-600 text-white p-6 rounded-2xl hover:from-purple-600 hover:to-purple-700 transition-all transform hover:scale-105">
                 <div className="flex items-center justify-between mb-4">
                   <BarChart3 className="w-8 h-8" />
                   <ArrowRight className="w-5 h-5" />
@@ -364,59 +265,68 @@ function Dashboard() {
               </button>
             </div>
 
+            {/* Feature Highlights */}
+            <div className="grid md:grid-cols-3 gap-6 mb-8">
+              <div className="bg-white p-6 rounded-2xl border border-gray-200">
+                <div className="w-12 h-12 bg-blue-100 rounded-lg flex items-center justify-center mb-4">
+                  <Zap className="w-6 h-6 text-blue-600" />
+                </div>
+                <h3 className="text-lg font-semibold text-gray-900 mb-2">Lightning Fast</h3>
+                <p className="text-gray-600 text-sm">Complete forms 95% faster with voice commands</p>
+              </div>
+              <div className="bg-white p-6 rounded-2xl border border-gray-200">
+                <div className="w-12 h-12 bg-emerald-100 rounded-lg flex items-center justify-center mb-4">
+                  <Brain className="w-6 h-6 text-emerald-600" />
+                </div>
+                <h3 className="text-lg font-semibold text-gray-900 mb-2">AI-Powered</h3>
+                <p className="text-gray-600 text-sm">Advanced AI understands context and intent</p>
+              </div>
+              <div className="bg-white p-6 rounded-2xl border border-gray-200">
+                <div className="w-12 h-12 bg-purple-100 rounded-lg flex items-center justify-center mb-4">
+                  <Shield className="w-6 h-6 text-purple-600" />
+                </div>
+                <h3 className="text-lg font-semibold text-gray-900 mb-2">Secure</h3>
+                <p className="text-gray-600 text-sm">Enterprise-grade security and compliance</p>
+              </div>
+            </div>
+
             {/* Recent Activity */}
             <div className="bg-white rounded-2xl border border-gray-200 p-6">
-              <div className="flex items-center justify-between mb-6">
-                <h2 className="text-xl font-bold text-gray-900">Recent Contact Submissions</h2>
-                <button 
-                  onClick={() => setSelectedTab('contact-submissions')}
-                  className="text-blue-600 hover:text-blue-700 text-sm font-medium"
-                >
-                  View all
-                </button>
+              <h2 className="text-xl font-bold text-gray-900 mb-6">Recent Activity</h2>
+              <div className="space-y-4">
+                <div className="flex items-center p-4 border border-gray-200 rounded-lg">
+                  <div className="w-10 h-10 bg-blue-100 rounded-full flex items-center justify-center mr-4">
+                    <Mic className="w-5 h-5 text-blue-600" />
+                  </div>
+                  <div>
+                    <h4 className="font-medium text-gray-900">Voice Form Builder</h4>
+                    <p className="text-sm text-gray-600">Ready to create your first voice-powered form</p>
+                  </div>
+                </div>
+                <div className="flex items-center p-4 border border-gray-200 rounded-lg">
+                  <div className="w-10 h-10 bg-emerald-100 rounded-full flex items-center justify-center mr-4">
+                    <FileText className="w-5 h-5 text-emerald-600" />
+                  </div>
+                  <div>
+                    <h4 className="font-medium text-gray-900">Templates Available</h4>
+                    <p className="text-sm text-gray-600">Browse industry-specific form templates</p>
+                  </div>
+                </div>
+                <div className="flex items-center p-4 border border-gray-200 rounded-lg">
+                  <div className="w-10 h-10 bg-purple-100 rounded-full flex items-center justify-center mr-4">
+                    <Globe className="w-5 h-5 text-purple-600" />
+                  </div>
+                  <div>
+                    <h4 className="font-medium text-gray-900">Account Active</h4>
+                    <p className="text-sm text-gray-600">Your account is ready for voice form creation</p>
+                  </div>
+                </div>
               </div>
-              
-              {recentSubmissions.length === 0 ? (
-                <div className="text-center py-8">
-                  <Mail className="w-12 h-12 text-gray-400 mx-auto mb-4" />
-                  <h3 className="text-lg font-medium text-gray-900 mb-2">No submissions yet</h3>
-                  <p className="text-gray-600">Contact form submissions will appear here</p>
-                </div>
-              ) : (
-                <div className="space-y-4">
-                  {recentSubmissions.map((submission) => (
-                    <div key={submission.id} className="flex items-center justify-between p-4 border border-gray-200 rounded-lg hover:bg-gray-50 transition-colors">
-                      <div className="flex items-center space-x-4">
-                        <div className="w-10 h-10 bg-blue-100 rounded-full flex items-center justify-center">
-                          <User className="w-5 h-5 text-blue-600" />
-                        </div>
-                        <div>
-                          <h4 className="font-medium text-gray-900">
-                            {submission.first_name} {submission.last_name}
-                          </h4>
-                          <p className="text-sm text-gray-600">{submission.email}</p>
-                          {submission.company && (
-                            <p className="text-xs text-gray-500">{submission.company}</p>
-                          )}
-                        </div>
-                      </div>
-                      <div className="flex items-center space-x-3">
-                        <span className={`text-xs px-2 py-1 rounded-full ${getStatusColor(submission.status)}`}>
-                          {submission.status.charAt(0).toUpperCase() + submission.status.slice(1)}
-                        </span>
-                        <span className="text-xs text-gray-500">
-                          {new Date(submission.created_at).toLocaleDateString()}
-                        </span>
-                      </div>
-                    </div>
-                  ))}
-                </div>
-              )}
             </div>
           </>
         )}
 
-        {/* Contact Submissions Tab */}
+        {/* Contact Submissions Tab - NEW */}
         {selectedTab === 'contact-submissions' && (
           <div className="space-y-6">
             {/* Filters and Search */}
@@ -561,30 +471,6 @@ function Dashboard() {
                 </div>
               )}
             </div>
-          </div>
-        )}
-
-        {/* Forms Tab */}
-        {selectedTab === 'forms' && (
-          <div className="text-center py-12">
-            <FileText className="w-12 h-12 text-gray-400 mx-auto mb-4" />
-            <h3 className="text-lg font-medium text-gray-900 mb-2">No forms created yet</h3>
-            <p className="text-gray-600 mb-6">Create your first voice-powered form to get started</p>
-            <button 
-              onClick={() => setShowVoiceBuilder(true)}
-              className="bg-blue-600 text-white px-6 py-2 rounded-lg hover:bg-blue-700 transition-colors"
-            >
-              Create Your First Form
-            </button>
-          </div>
-        )}
-
-        {/* Analytics Tab */}
-        {selectedTab === 'analytics' && (
-          <div className="text-center py-12">
-            <BarChart3 className="w-12 h-12 text-gray-400 mx-auto mb-4" />
-            <h3 className="text-lg font-medium text-gray-900 mb-2">Analytics Coming Soon</h3>
-            <p className="text-gray-600">Detailed analytics and insights will be available here</p>
           </div>
         )}
       </div>
